@@ -1,0 +1,87 @@
+# Terraform files
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+*.tfplan
+.crash.log
+
+# Ignore backend configuration
+*.backend
+
+# Ignore sensitive data
+*.tfvars
+*.tfvars.json
+
+# Ignore local Terraform command history
+.terraformrc
+.terraformrc.json
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React build directory
+/build
+/dist
+/out
+
+# Ignore environment variable files
+.env
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Dependency directories
+node_modules/
+.pnp
+.pnp.js
+
+# Editor directories and files
+.vscode/
+.idea/
+.DS_Store
+
+# AWS related files
+*.pem
+*.key
+*.crt
+
+# Ignore any AWS credentials or config files
+.aws/credentials
+.aws/config
+
+# Ignore temporary files
+*.tmp
+*.swp
+*.swo
+*.bak
+*.orig
+*.patch
+
+# Ignore AWS SAM build artifacts
+.aws-sam/
+
+# Ignore Terraform output files
+*.tfoutput
+
+# Ignore React-specific files
+.eslintcache
+.cache/
+.npm/
+*.map
+*.lock
+
+# Ignore AWS Lambda deployment packages
+lambda_function.zip
+
