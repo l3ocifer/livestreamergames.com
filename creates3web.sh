@@ -1,73 +1,70 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-# Function to check if a command exists
+export AWS_PAGER=""
+
 command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Check if Terraform is installed
-if ! command_exists terraform; then
-  echo "Terraform is not installed. Please install Terraform and try again."
-  exit 1
+for cmd in terraform aws; do
+  if ! command_exists "$cmd"; then
+    echo "Error: $cmd is not installed. Please install it and try again."
+    exit 1
+  fi
+done
+
+if [ -f .domain ]; then
+  previous_domain=$(cat .domain)
+  read -p "Enter your domain name (press Enter to use $previous_domain): " domain_name
+  domain_name=${domain_name:-$previous_domain}
+else
+  read -p "Enter your domain name: " domain_name
 fi
 
-# Check if AWS CLI is installed and configured
-if ! command_exists aws; then
-  echo "AWS CLI is not installed. Please install and configure AWS CLI and try again."
-  exit 1
-fi
+echo "$domain_name" > .domain
 
-# Prompt for the domain name
-read -p "Enter your domain name: " domain_name
-
-# Set the bucket name
 bucket_name="${domain_name}-tf-state"
 
 # Replace placeholders in Terraform files
-sed -i.bak "s/livestreamergames.com-tf-state/${bucket_name}/g" backend.tf
+sed -i.bak "s/BUCKET_NAME_PLACEHOLDER/${bucket_name}/g" backend.tf
 rm backend.tf.bak
 
-# Initialize Terraform with local backend
-echo "Initializing Terraform with local backend..."
-terraform init
-
-# Create S3 bucket for Terraform state
-echo "Creating S3 bucket for Terraform state..."
-terraform apply -auto-approve -target=aws_s3_bucket.terraform_state
-
-# Wait for the S3 bucket to be available
-echo "Waiting for S3 bucket to be available..."
-aws s3api wait bucket-exists --bucket "${bucket_name}"
-
-# Verify the bucket exists
-if aws s3api head-bucket --bucket "${bucket_name}" 2>/dev/null; then
-  echo "S3 bucket is now available."
+# Check if S3 bucket for Terraform state exists
+if ! aws s3api head-bucket --bucket "${bucket_name}" 2>/dev/null; then
+  echo "Creating S3 bucket for Terraform state..."
+  aws s3api create-bucket --bucket "${bucket_name}" --region us-east-1 >/dev/null 2>&1
+  aws s3api wait bucket-exists --bucket "${bucket_name}" >/dev/null 2>&1
+  aws s3api put-bucket-versioning --bucket "${bucket_name}" --versioning-configuration Status=Enabled >/dev/null 2>&1
+  aws s3api put-bucket-encryption --bucket "${bucket_name}" --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}' >/dev/null 2>&1
 else
-  echo "Failed to create S3 bucket. Please check your AWS credentials and permissions."
-  exit 1
+  echo "S3 bucket for Terraform state already exists."
 fi
 
-# Add backend configuration to main.tf
-cat <<EOF >> main.tf
+# Initialize Terraform
+echo "Initializing Terraform..."
+terraform init -reconfigure -input=false
 
-terraform {
-  backend "s3" {
-    bucket = "${bucket_name}"
-    key    = "terraform/state"
-    region = "us-east-1"
-  }
-}
-EOF
+# Import the existing S3 bucket if it wasn't created by Terraform
+terraform import aws_s3_bucket.terraform_state ${bucket_name} || true
 
-# Reinitialize Terraform with S3 backend
-echo "Reinitializing Terraform with S3 backend..."
-terraform init -force-copy
+echo "domain_name = \"${domain_name}\"" > terraform.auto.tfvars
 
-# Apply the main infrastructure
-echo "Applying the main infrastructure..."
-terraform apply -var="domain_name=${domain_name}" -auto-approve
+# Apply the Terraform configuration
+echo "Applying Terraform configuration..."
+terraform apply -auto-approve
+
+if ! aws s3 ls "s3://${domain_name}/index.html" &>/dev/null; then
+  echo "<html><body><h1>Welcome to ${domain_name}</h1></body></html>" | aws s3 cp - "s3://${domain_name}/index.html" >/dev/null 2>&1
+fi
+
+if ! aws s3 ls "s3://${domain_name}/error.html" &>/dev/null; then
+  echo "<html><body><h1>Error - Page Not Found</h1></body></html>" | aws s3 cp - "s3://${domain_name}/error.html" >/dev/null 2>&1
+fi
+
+distribution_id=$(terraform output -raw cloudfront_distribution_id)
+aws cloudfront create-invalidation --distribution-id "${distribution_id}" --paths "/*" >/dev/null 2>&1
 
 echo "Deployment complete! Your website should be accessible at https://${domain_name}"
 echo "Please allow some time for the DNS changes to propagate."

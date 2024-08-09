@@ -1,3 +1,11 @@
+terraform {
+  backend "s3" {
+    bucket = "livestreamergames.com-tf-state"
+    key    = "terraform/state"
+    region = "us-east-1"
+  }
+}
+
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "livestreamergames.com-tf-state"
 

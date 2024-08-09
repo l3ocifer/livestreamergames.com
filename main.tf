@@ -23,9 +23,8 @@ data "aws_route53_zone" "hosted_zone" {
 }
 
 resource "aws_acm_certificate" "ssl_certificate" {
-  domain_name       = var.domain_name
-  validation_method = "DNS"
-
+  domain_name               = var.domain_name
+  validation_method         = "DNS"
   subject_alternative_names = ["www.${var.domain_name}"]
 
   lifecycle {
@@ -59,6 +58,14 @@ resource "aws_s3_bucket" "website_bucket" {
   bucket = var.domain_name
 }
 
+resource "aws_cloudfront_origin_access_control" "cloudfront_oac" {
+  name                              = "${var.domain_name}-oac"
+  description                       = "Origin Access Control for ${var.domain_name}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
 resource "aws_s3_bucket_public_access_block" "website_bucket_public_access_block" {
   bucket = aws_s3_bucket.website_bucket.id
 
@@ -83,16 +90,8 @@ resource "aws_s3_bucket_website_configuration" "website_config" {
   }
 
   error_document {
-    key = "404.html"
+    key = "error.html"
   }
-}
-
-resource "aws_cloudfront_origin_access_control" "cloudfront_oac" {
-  name                              = "${var.domain_name}-oac"
-  description                       = "Origin Access Control for ${var.domain_name}"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
 }
 
 resource "aws_cloudfront_distribution" "s3_distribution" {
@@ -184,12 +183,4 @@ output "website_url" {
 
 output "cloudfront_distribution_id" {
   value = aws_cloudfront_distribution.s3_distribution.id
-}
-
-terraform {
-  backend "s3" {
-    bucket = "livestreamergames.com-tf-state"
-    key    = "terraform/state"
-    region = "us-east-1"
-  }
 }
